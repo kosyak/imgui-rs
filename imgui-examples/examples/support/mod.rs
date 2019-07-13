@@ -1,15 +1,15 @@
-use glium::glutin::{self, Event, WindowEvent};
+use glium::glutin::{self, event::{ElementState, VirtualKeyCode, Event, WindowEvent}, platform::unix::WindowExtUnix};
 use glium::{Display, Surface};
 use imgui::{Context, FontConfig, FontGlyphRanges, FontSource, Ui};
 use imgui_glium_renderer::Renderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::time::Instant;
 
-mod clipboard;
+// mod clipboard;
 
 pub struct System {
-    pub events_loop: glutin::EventsLoop,
-    pub display: glium::Display,
+    pub event_loop: glutin::event_loop::EventLoop<()>,
+    pub display: Display,
     pub imgui: Context,
     pub platform: WinitPlatform,
     pub renderer: Renderer,
@@ -17,26 +17,27 @@ pub struct System {
 }
 
 pub fn init(title: &str) -> System {
-    let title = match title.rfind('/') {
+    let _title = match title.rfind('/') {
         Some(idx) => title.split_at(idx + 1).1,
         None => title,
     };
-    let events_loop = glutin::EventsLoop::new();
-    let context = glutin::ContextBuilder::new().with_vsync(true);
-    let builder = glutin::WindowBuilder::new()
-        .with_title(title.to_owned())
-        .with_dimensions(glutin::dpi::LogicalSize::new(1024f64, 768f64));
-    let display =
-        Display::new(builder, context, &events_loop).expect("Failed to initialize display");
+    let event_loop = glutin::event_loop::EventLoop::new();
+    let cb = glutin::ContextBuilder::new()
+        .with_gl(glutin::GlRequest::GlThenGles { opengl_version: (3, 0), opengles_version: (2, 0) })
+        .with_vsync(true);
+    let wb = glutin::window::WindowBuilder::new()
+        .with_fullscreen(Some(event_loop.primary_monitor()));
+    let gl_window = cb.build_windowed(wb, &event_loop).unwrap();
+    let display = Display::with_debug(gl_window, glium::debug::DebugCallbackBehavior::PrintAll).unwrap();
 
     let mut imgui = Context::create();
     imgui.set_ini_filename(None);
 
-    if let Some(backend) = clipboard::init() {
-        imgui.set_clipboard_backend(Box::new(backend));
-    } else {
-        eprintln!("Failed to initialize clipboard");
-    }
+    // if let Some(backend) = clipboard::init() {
+    //     imgui.set_clipboard_backend(Box::new(backend));
+    // } else {
+    //     eprintln!("Failed to initialize clipboard");
+    // }
 
     let mut platform = WinitPlatform::init(&mut imgui);
     {
@@ -46,7 +47,7 @@ pub fn init(title: &str) -> System {
     }
 
     let hidpi_factor = platform.hidpi_factor();
-    let font_size = (13.0 * hidpi_factor) as f32;
+    let font_size = (48.0 * hidpi_factor) as f32;
     imgui.fonts().add_font(&[
         FontSource::DefaultFontData {
             config: Some(FontConfig {
@@ -56,6 +57,7 @@ pub fn init(title: &str) -> System {
         },
         FontSource::TtfData {
             data: include_bytes!("../../../resources/mplus-1p-regular.ttf"),
+            // data: include_bytes!("../../../resources/Roboto-Regular.ttf"),
             size_pixels: font_size,
             config: Some(FontConfig {
                 rasterizer_multiply: 1.75,
@@ -66,11 +68,12 @@ pub fn init(title: &str) -> System {
     ]);
 
     imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
+    imgui.io_mut().config_flags |= imgui::ConfigFlags::NAV_ENABLE_GAMEPAD;
 
     let renderer = Renderer::init(&mut imgui, &display).expect("Failed to initialize renderer");
 
     System {
-        events_loop,
+        event_loop,
         display,
         imgui,
         platform,
@@ -82,10 +85,10 @@ pub fn init(title: &str) -> System {
 impl System {
     pub fn main_loop<F: FnMut(&mut bool, &mut Ui)>(self, mut run_ui: F) {
         let System {
-            mut events_loop,
+            event_loop,
             display,
             mut imgui,
-            mut platform,
+            platform,
             mut renderer,
             ..
         } = self;
@@ -95,15 +98,15 @@ impl System {
         let mut run = true;
 
         while run {
-            events_loop.poll_events(|event| {
-                platform.handle_event(imgui.io_mut(), &window, &event);
+            // event_loop.poll_events(|event| {
+            //     platform.handle_event(imgui.io_mut(), &window, &event);
 
-                if let Event::WindowEvent { event, .. } = event {
-                    if let WindowEvent::CloseRequested = event {
-                        run = false;
-                    }
-                }
-            });
+            //     if let Event::WindowEvent { event, .. } = event {
+            //         if let WindowEvent::CloseRequested = event {
+            //             run = false;
+            //         }
+            //     }
+            // });
 
             let io = imgui.io_mut();
             platform
@@ -114,13 +117,15 @@ impl System {
             run_ui(&mut run, &mut ui);
 
             let mut target = display.draw();
-            target.clear_color_srgb(1.0, 1.0, 1.0, 1.0);
+            target.clear_color_srgb(0.1, 0.1, 0.1, 1.0);
             platform.prepare_render(&ui, &window);
             let draw_data = ui.render();
             renderer
                 .render(&mut target, draw_data)
                 .expect("Rendering failed");
+
             target.finish().expect("Failed to swap buffers");
+            window.gbm_page_flip();
         }
     }
 }

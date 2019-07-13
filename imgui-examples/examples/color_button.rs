@@ -19,8 +19,8 @@ fn main() {
 fn example_selector(run: &mut bool, ui: &mut Ui, state: &mut State) {
     let w = Window::new(im_str!("Color button examples"))
         .opened(run)
-        .position([20.0, 20.0], Condition::Appearing)
-        .size([700.0, 100.0], Condition::Appearing)
+        .position([0.0, 0.0], Condition::Appearing)
+        .size([1200.0, 400.0], Condition::Appearing)
         .resizable(false);
     w.build(ui, || {
         let ex1 = ui.radio_button(im_str!("Example 1: Basics"), &mut state.example, 1);
